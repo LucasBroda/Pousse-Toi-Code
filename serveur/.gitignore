@@ -1,0 +1,4 @@
+# Base et copies : données de la serre, jamais versionnées
+donnees/
+__pycache__/
+.env
