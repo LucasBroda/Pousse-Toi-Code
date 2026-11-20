@@ -32,13 +32,26 @@ RETARD_ALERTE_S = 3 * CADENCE_RELEVE_S
 LIMITE_HISTORIQUE_DEFAUT = 288
 LIMITE_HISTORIQUE_MAX = 2016            # 7 jours
 
+# Périodes des courbes de la page web : durée en heures et regroupement des
+# relevés (0 = chaque relevé, 60 = moyenne par heure).
+PERIODES_HISTORIQUE = {
+    "24h": {"heures": 24, "regroupement_min": 0},
+    "7j": {"heures": 24 * 7, "regroupement_min": 60},
+}
+
+# --- Plants -------------------------------------------------------------
+# Cultures proposées dans l'application (D-31) et plant de départ de chaque
+# bac (D-26 : A salade, B radis). Le choix fait sur la page est gardé en base.
+PLANTS_DISPONIBLES = ("salade", "radis")
+PLANTS_PAR_DEFAUT = {"A": "salade", "B": "radis"}
+
 # --- Configuration envoyée à l'ESP32 (GET /api/config) -------------------
 # Valeurs PROVISOIRES de D-30 (19/11/2026), à confirmer après calibration du
 # sol, mesure de lumière (P-09) et réception de la pompe. P-08 reste ouvert
 # pour les valeurs définitives (responsable : Lucas Manche).
 CONFIG_ESP32 = {
     "version_contrat": VERSION_CONTRAT,
-    "plant": "salade",
+    "plant": "salade",                  # remplacé par le plant du bac A (contrat v0 : un seul plant)
     "seuils": {
         "sol_humidite_min_pct": 40,
         "air_temperature_min_c": 8,

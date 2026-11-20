@@ -21,13 +21,28 @@ from datetime import datetime, timedelta, timezone
 import config
 
 
+# Humidité de la terre simulée : elle baisse lentement, plus vite le jour, et
+# remonte d'un coup quand la serre arrose sous le seuil de 40 %.
+SOL = {"A": 55.0, "B": 60.0}
+SECHAGE_PAR_RELEVE = {"A": 0.22, "B": 0.16}     # points de % perdus toutes les 5 min
+
+
+def faire_evoluer_sol(jour):
+    arrose_ml = 0
+    for bac in SOL:
+        SOL[bac] -= SECHAGE_PAR_RELEVE[bac] * (0.5 + jour) + random.uniform(-0.05, 0.05)
+        if SOL[bac] < 40:
+            SOL[bac] += 18
+            arrose_ml += 100
+    return round(SOL["A"], 1), round(SOL["B"], 1), arrose_ml
+
+
 def fabriquer_releve(instant, sequence, capteur_absent):
     heure = instant.hour + instant.minute / 60
     jour = max(0.0, math.sin((heure - 7) / 12 * math.pi))     # 0 la nuit, 1 vers 13h
     temperature = round(17 + 7 * jour + random.uniform(-0.3, 0.3), 1)
     lux = int(150 + 4500 * jour + random.uniform(-100, 100)) if jour > 0 else 0
-    sol_a = round(random.uniform(38, 55), 1)
-    sol_b = round(random.uniform(42, 60), 1)
+    sol_a, sol_b, arrose_ml = faire_evoluer_sol(jour)
 
     def etat(valeur, alerte, critique):
         return "critique" if critique(valeur) else "alerte" if alerte(valeur) else "ok"
@@ -43,12 +58,12 @@ def fabriquer_releve(instant, sequence, capteur_absent):
              "humidite_pct": None if capteur_absent else sol_b},
         ],
         "air": {"temperature_c": temperature,
-                "humidite_pct": round(random.uniform(55, 70), 1),
-                "pression_hpa": round(random.uniform(1008, 1018), 1)},
+                "humidite_pct": round(68 - 12 * jour + random.uniform(-0.5, 0.5), 1),
+                "pression_hpa": round(1013 + 3 * math.sin(sequence / 400) + random.uniform(-0.2, 0.2), 1)},
         "lumiere_lux": None if capteur_absent else lux,
         "ventilateur_actif": temperature > 25,
-        "arrosage": {"ml_depuis_dernier_releve": 100 if sol_a < 40 else 0,
-                     "secondes_depuis_dernier_releve": 71 if sol_a < 40 else 0},
+        "arrosage": {"ml_depuis_dernier_releve": arrose_ml,
+                     "secondes_depuis_dernier_releve": round(arrose_ml / 85 * 60)},
         "voyants": {
             "eau": etat(min(sol_a, sol_b), lambda v: v < 40, lambda v: v < 25),
             "lumiere": "ok" if capteur_absent or not 8 <= heure <= 18 or lux >= 2000 else "alerte",

@@ -151,12 +151,63 @@ class TestServeur(unittest.TestCase):
                          ["2026-11-20T14:15:00Z", "2026-11-20T14:10:00Z"])
         self.assertEqual(self.requete("/api/releves?limite=abc")[0], 400)
 
-    def test_page_web_servie(self):
-        statut, corps = self.requete("/")
+    def test_page_web_servie_sans_ressource_externe(self):
+        for chemin, attendu in (("/", "Serre Autonome"), ("/textes.js", "window.TEXTES")):
+            statut, corps = self.requete(chemin)
+            self.assertEqual(statut, 200, chemin)
+            texte = corps.decode("utf-8")
+            self.assertIn(attendu, texte)
+            self.assertNotRegex(texte, r"""(src|href)\s*=\s*["']?(https?:)?//""",
+                                "la page ne doit charger aucune ressource externe")
+        self.assertEqual(self.requete("/inconnu.js")[0], 404)
+        self.assertEqual(self.requete("/../serveur.py")[0], 404)
+        self.assertEqual(self.requete("/config.py")[0], 404)
+
+    def envoyer_serie(self, debut_heure, nombre, pas_min, **valeurs):
+        """Envoie `nombre` relevés espacés de `pas_min` minutes à partir du 20/11 à debut_heure UTC."""
+        for i in range(nombre):
+            minutes = debut_heure * 60 + i * pas_min
+            releve = copy.deepcopy(EXEMPLE_CONTRAT)
+            releve["horodatage"] = (f"2026-11-{20 + minutes // 1440:02d}T"
+                                    f"{minutes // 60 % 24:02d}:{minutes % 60:02d}:00Z")
+            releve["sequence"] = i
+            for cle, valeur in valeurs.items():
+                releve["air"][cle] = valeur
+            releve["arrosage"]["ml_depuis_dernier_releve"] = 10
+            self.assertEqual(self.requete("/api/releves", releve)[0], 200)
+
+    def test_historique_24h_part_du_dernier_releve(self):
+        self.assertEqual(json.loads(self.requete("/api/historique")[1])["points"], [])
+        self.envoyer_serie(0, 12 * 30, 5)          # 30 h de relevés, toutes les 5 min
+        donnees = json.loads(self.requete("/api/historique?periode=24h")[1])
+        points = donnees["points"]
+        self.assertEqual(len(points), 24 * 12)      # fenêtre de 24 h, bornée par le dernier relevé
+        self.assertEqual(points[-1]["horodatage"], "2026-11-21T05:55:00Z")
+        self.assertLess(points[0]["horodatage"], points[-1]["horodatage"])
+        self.assertEqual(points[0]["air_temperature_c"], 21.4)
+        self.assertEqual(self.requete("/api/historique?periode=1an")[0], 400)
+
+    def test_historique_7j_moyenne_par_heure(self):
+        self.envoyer_serie(10, 12, 5, temperature_c=20.0)
+        self.envoyer_serie(11, 12, 5, temperature_c=24.0)
+        points = json.loads(self.requete("/api/historique?periode=7j")[1])["points"]
+        self.assertEqual([p["horodatage"] for p in points], ["2026-11-20T10:00:00Z", "2026-11-20T11:00:00Z"])
+        self.assertEqual([p["air_temperature_c"] for p in points], [20.0, 24.0])
+        self.assertEqual(points[0]["arrosage_ml"], 120)       # somme sur l'heure
+        self.assertEqual(points[0]["ventilateur_actif"], 1)
+
+    def test_choix_du_plant_par_bac(self):
+        donnees = json.loads(self.requete("/api/plants")[1])
+        self.assertEqual(donnees["plants"], {"A": "salade", "B": "radis"})
+        self.assertEqual(donnees["disponibles"], ["salade", "radis"])
+        statut, corps = self.requete("/api/plants", {"bac": "A", "plant": "radis"})
         self.assertEqual(statut, 200)
-        self.assertIn("Serre Autonome", corps.decode("utf-8"))
-        self.assertNotIn("http", corps.decode("utf-8").replace("http-equiv", ""),
-                         "la page ne doit charger aucune ressource externe")
+        self.assertEqual(json.loads(corps)["plants"], {"A": "radis", "B": "radis"})
+        self.assertEqual(json.loads(self.requete("/api/plants")[1])["plants"]["A"], "radis")
+        # Contrat v0 : un seul plant envoyé à l'ESP32, celui du bac A.
+        self.assertEqual(json.loads(self.requete("/api/config")[1])["plant"], "radis")
+        for mauvais in ({"bac": "C", "plant": "radis"}, {"bac": "A", "plant": "tomate"}, [1]):
+            self.assertEqual(self.requete("/api/plants", mauvais)[0], 400, mauvais)
 
     def test_route_inconnue(self):
         self.assertEqual(self.requete("/api/inconnue")[0], 404)

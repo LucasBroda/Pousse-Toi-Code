@@ -5,168 +5,546 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Serre Autonome</title>
 <link rel="icon" href="data:,">
-<!-- Page web v0 : dernière mesure. Aucune ressource externe (réseau local seulement). -->
+<!-- Page web v1. Aucune ressource externe : la serre fonctionne sans Internet (D-06). -->
 <style>
   :root {
-    --fond: #f6f5f1; --carte: #ffffff; --texte: #1d1f1c; --discret: #62665f;
-    --filet: #dcdad3; --ok: #2f7a3e; --alerte: #a86a00; --critique: #b3261e;
+    --plan: #f9f9f7; --surface: #fcfcfb; --encre: #0b0b0b; --encre-2: #52514e; --muet: #898781;
+    --grille: #e1e0d9; --axe: #c3c2b7; --bord: rgba(11,11,11,0.10);
+    --serie-a: #2a78d6; --serie-b: #eb6834; --bande: rgba(42,120,214,0.08);
+    --ok: #0ca30c; --alerte: #fab219; --critique: #d03b3b; --texte-ok: #006300;
+    --accent: #2a78d6;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --fond: #141513; --carte: #1e201d; --texte: #ecebe6; --discret: #a3a69f;
-      --filet: #33362f; --ok: #6cc17d; --alerte: #e0a640; --critique: #f2817a;
+      --plan: #0d0d0d; --surface: #1a1a19; --encre: #f0efec; --encre-2: #c3c2b7; --muet: #898781;
+      --grille: #2c2c2a; --axe: #383835; --bord: rgba(255,255,255,0.10);
+      --serie-a: #3987e5; --serie-b: #d95926; --bande: rgba(57,135,229,0.12);
+      --texte-ok: #0ca30c; --accent: #3987e5;
     }
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--fond); color: var(--texte);
-    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
-  h1 { font-size: 1.35rem; margin: 0 0 4px; }
-  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em;
-       color: var(--discret); margin: 0 0 10px; font-weight: 600; }
-  .meta { color: var(--discret); margin: 0 0 18px; font-size: .95rem; }
-  .bandeau { border: 1px solid var(--alerte); color: var(--alerte); border-radius: 8px;
-             padding: 10px 12px; margin: 0 0 16px; display: none; }
-  .bandeau.visible { display: block; }
-  section { background: var(--carte); border: 1px solid var(--filet); border-radius: 10px;
-            padding: 14px 16px; margin-bottom: 14px; }
-  dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; }
-  dt { color: var(--discret); }
-  dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-  .absent { color: var(--discret); font-weight: 400; }
-  .etat-ok { color: var(--ok); } .etat-alerte { color: var(--alerte); }
-  .etat-critique { color: var(--critique); }
+  body { margin: 0; background: var(--plan); color: var(--encre);
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.4rem; margin: 0; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--encre-2);
+       margin: 28px 0 10px; font-weight: 600; }
+  .etat { font-size: 1.15rem; font-weight: 600; margin: 6px 0 2px; }
+  .meta { color: var(--encre-2); margin: 0; font-size: .92rem; }
+  .bandeau { border: 1px solid var(--alerte); border-left-width: 4px; border-radius: 8px;
+             padding: 10px 12px; margin: 14px 0 0; background: var(--surface); }
+  .carte { background: var(--surface); border: 1px solid var(--bord); border-radius: 12px; padding: 14px 16px; }
+  .grille-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grille-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 560px) { .grille-2 { grid-template-columns: 1fr; } .grille-3 { grid-template-columns: 1fr 1fr; } }
+  [hidden] { display: none !important; }
+
+  /* Gestes à faire */
+  .geste { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: start; margin-bottom: 10px; }
+  .geste strong { display: block; }
+  .pastille { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; }
+  .pastille.ok { background: var(--ok); } .pastille.alerte { background: var(--alerte); }
+  .pastille.critique { background: var(--critique); } .pastille.absent { background: var(--muet); }
+
+  /* Voyants */
+  .voyants { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; color: var(--encre-2); font-size: .92rem; }
+  .voyant { display: inline-flex; align-items: center; gap: 6px; }
+  .voyant .pastille { margin-top: 0; }
+
+  /* Bacs */
+  .bac-tete { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .bac-tete span { color: var(--encre-2); font-weight: 600; }
+  select { font: inherit; color: var(--encre); background: var(--plan); border: 1px solid var(--axe);
+           border-radius: 8px; padding: 6px 8px; min-height: 40px; }
+  .valeur { font-size: 2rem; font-weight: 650; font-variant-numeric: tabular-nums; margin: 10px 0 4px; }
+  .valeur small { font-size: 1rem; font-weight: 500; color: var(--encre-2); }
+  .jauge { position: relative; height: 8px; border-radius: 4px; background: var(--grille); margin: 8px 0 6px; }
+  .jauge > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--serie-a); }
+  .jauge.b > i { background: var(--serie-b); }
+  .jauge > b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--encre-2); }
+  .legende-jauge { font-size: .85rem; color: var(--muet); }
+  .enregistre { font-size: .85rem; color: var(--texte-ok); min-height: 1.2em; margin-top: 4px; }
+
+  /* Tuiles air et lumière */
+  .tuile .titre { color: var(--encre-2); font-size: .9rem; }
+  .tuile .chiffre { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .absent-texte { color: var(--muet); font-weight: 400; font-size: 1rem; }
+
+  /* Historique */
+  .segments { display: inline-flex; border: 1px solid var(--axe); border-radius: 8px; overflow: hidden; }
+  .segments button { font: inherit; font-size: .9rem; border: 0; background: transparent; color: var(--encre);
+                     padding: 8px 14px; min-height: 40px; cursor: pointer; }
+  .segments button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .graphique { margin-top: 12px; }
+  .graphique h3 { font-size: 1rem; margin: 0 0 2px; }
+  .graphique .sous-titre { color: var(--encre-2); font-size: .85rem; margin: 0 0 6px; }
+  .legende { display: flex; gap: 16px; font-size: .85rem; color: var(--encre-2); margin-bottom: 4px; }
+  .legende span::before { content: ""; display: inline-block; width: 14px; height: 2px; vertical-align: middle;
+                          margin-right: 6px; background: var(--c); }
+  .trace { position: relative; }
+  .trace svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+  .bulle { position: absolute; top: 0; pointer-events: none; background: var(--surface); border: 1px solid var(--bord);
+           border-radius: 8px; padding: 6px 9px; font-size: .82rem; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+           white-space: nowrap; color: var(--encre); }
+  .bulle .ligne-bulle { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  .bulle i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .vide { color: var(--muet); font-size: .9rem; padding: 24px 0; text-align: center; }
+  details { margin-top: 8px; font-size: .88rem; }
+  summary { cursor: pointer; color: var(--encre-2); }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--grille); }
+  th:first-child, td:first-child { text-align: left; }
+  .defile { max-height: 260px; overflow: auto; }
+
+  /* Conseils */
+  .fiche h3 { font-size: 1rem; margin: 0 0 8px; }
+  .fiche dl { margin: 0; }
+  .fiche dt { font-weight: 600; font-size: .9rem; margin-top: 8px; }
+  .fiche dd { margin: 2px 0 0; color: var(--encre-2); font-size: .92rem; }
+  footer { margin-top: 32px; color: var(--muet); font-size: .82rem; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Serre Autonome</h1>
-  <p class="meta" id="meta">Chargement…</p>
-  <p class="bandeau" id="bandeau"></p>
+  <header>
+    <h1>Serre Autonome</h1>
+    <p class="etat" id="etat">Chargement…</p>
+    <p class="meta" id="meta"></p>
+    <div class="voyants" id="voyants" aria-label="État des voyants"></div>
+    <p class="bandeau" id="bandeau" hidden></p>
+  </header>
 
-  <section>
-    <h2>Voyants</h2>
-    <dl>
-      <dt>Eau</dt><dd id="voyant_eau">—</dd>
-      <dt>Lumière</dt><dd id="voyant_lumiere">—</dd>
-      <dt>Chaleur</dt><dd id="voyant_chaleur">—</dd>
-    </dl>
+  <section id="section-gestes" hidden>
+    <h2>Gestes à faire</h2>
+    <div class="carte" id="gestes"></div>
   </section>
 
   <section>
-    <h2>Sol</h2>
-    <dl>
-      <dt>Bac A (salade)</dt><dd id="sol_a_humidite_pct">—</dd>
-      <dt>Bac B (radis)</dt><dd id="sol_b_humidite_pct">—</dd>
-    </dl>
+    <h2>Les bacs</h2>
+    <div class="grille-2">
+      <div class="carte" data-bac="A">
+        <div class="bac-tete"><span>Bac A</span>
+          <select aria-label="Plant du bac A" data-choix="A"></select></div>
+        <div class="valeur" data-valeur="sol_a_humidite_pct">—</div>
+        <div class="jauge" data-jauge="sol_a_humidite_pct"><i></i><b></b></div>
+        <div class="legende-jauge" data-legende-jauge></div>
+        <div class="enregistre" data-message="A" role="status"></div>
+      </div>
+      <div class="carte" data-bac="B">
+        <div class="bac-tete"><span>Bac B</span>
+          <select aria-label="Plant du bac B" data-choix="B"></select></div>
+        <div class="valeur" data-valeur="sol_b_humidite_pct">—</div>
+        <div class="jauge b" data-jauge="sol_b_humidite_pct"><i></i><b></b></div>
+        <div class="legende-jauge" data-legende-jauge></div>
+        <div class="enregistre" data-message="B" role="status"></div>
+      </div>
+    </div>
   </section>
 
   <section>
     <h2>Air et lumière</h2>
-    <dl>
-      <dt>Température</dt><dd id="air_temperature_c">—</dd>
-      <dt>Humidité de l'air</dt><dd id="air_humidite_pct">—</dd>
-      <dt>Pression</dt><dd id="air_pression_hpa">—</dd>
-      <dt>Lumière</dt><dd id="lumiere_lux">—</dd>
-    </dl>
+    <div class="grille-3">
+      <div class="carte tuile"><div class="titre">Température</div><div class="chiffre" id="air_temperature_c">—</div></div>
+      <div class="carte tuile"><div class="titre">Humidité de l'air</div><div class="chiffre" id="air_humidite_pct">—</div></div>
+      <div class="carte tuile"><div class="titre">Lumière</div><div class="chiffre" id="lumiere_lux">—</div></div>
+      <div class="carte tuile"><div class="titre">Ventilateur</div><div class="chiffre" id="ventilateur_actif">—</div></div>
+      <div class="carte tuile"><div class="titre">Eau versée sur 24 h</div><div class="chiffre" id="eau_24h">—</div></div>
+      <div class="carte tuile"><div class="titre">Pression</div><div class="chiffre" id="air_pression_hpa">—</div></div>
+    </div>
   </section>
 
   <section>
-    <h2>Actionneurs</h2>
-    <dl>
-      <dt>Ventilateur</dt><dd id="ventilateur_actif">—</dd>
-      <dt>Eau versée depuis le relevé précédent</dt><dd id="arrosage_ml">—</dd>
-    </dl>
+    <h2>Historique</h2>
+    <div class="segments" role="group" aria-label="Période des courbes">
+      <button type="button" data-periode="24h" aria-pressed="true">24 heures</button>
+      <button type="button" data-periode="7j" aria-pressed="false">7 jours</button>
+    </div>
+    <div class="carte graphique"><h3>Humidité de la terre</h3>
+      <p class="sous-titre">En %, avec le seuil d'arrosage</p><div id="courbe-sol"></div></div>
+    <div class="carte graphique"><h3>Température de l'air</h3>
+      <p class="sous-titre">En °C, avec la plage conseillée</p><div id="courbe-temperature"></div></div>
+    <div class="carte graphique"><h3>Lumière</h3>
+      <p class="sous-titre">En lux, avec le seuil de lumière</p><div id="courbe-lumiere"></div></div>
   </section>
+
+  <section>
+    <h2>Conseils</h2>
+    <div class="grille-2" id="fiches"></div>
+  </section>
+
+  <footer>Serre Autonome. Page servie par la serre, sans Internet ni compte.</footer>
 </main>
 
+<script src="textes.js"></script>
 <script>
-  "use strict";
-  const ACTUALISATION_MS = 60 * 1000;
-  const ETATS = { ok: "Normal", alerte: "Alerte", critique: "Critique" };
-  const nombreFr = (v, decimales) => v.toLocaleString("fr-FR",
-    { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+"use strict";
+const T = window.TEXTES;
+const ACTUALISATION_MS = 60 * 1000;
+const etat = { config: null, plants: null, disponibles: [], dernier: null, periode: "24h", points: [] };
 
-  // Format d'affichage de chaque valeur ; null = capteur absent ou en panne.
-  const FORMATS = {
-    sol_a_humidite_pct: v => nombreFr(v, 1) + " %",
-    sol_b_humidite_pct: v => nombreFr(v, 1) + " %",
-    air_temperature_c: v => nombreFr(v, 1) + " °C",
-    air_humidite_pct: v => nombreFr(v, 1) + " %",
-    air_pression_hpa: v => nombreFr(v, 1) + " hPa",
-    lumiere_lux: v => nombreFr(v, 0) + " lux",
-    ventilateur_actif: v => v ? "En marche" : "À l'arrêt",
-    arrosage_ml: v => nombreFr(v, 0) + " ml",
-  };
+// ---------- outils ----------
+const $ = s => document.querySelector(s);
+const nombre = (v, d) => v.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const instant = h => Date.parse(h);
+const fuseau = { timeZone: "Europe/Paris" };
+const formatHeure = new Intl.DateTimeFormat("fr-FR", { ...fuseau, hour: "2-digit", minute: "2-digit" });
+const formatJourHeure = new Intl.DateTimeFormat("fr-FR", { ...fuseau, weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const formatComplet = new Intl.DateTimeFormat("fr-FR", { ...fuseau, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const formatJour = new Intl.DateTimeFormat("fr-FR", { ...fuseau, weekday: "short", day: "numeric" });
+const formatHeureSeule = new Intl.DateTimeFormat("fr-FR", { ...fuseau, hour: "numeric", hourCycle: "h23" });
+const heureParis = t => +formatHeureSeule.formatToParts(t).find(p => p.type === "hour").value;
 
-  function afficher(id, valeur, format) {
-    const cellule = document.getElementById(id);
-    cellule.className = "";
-    if (valeur === null || valeur === undefined) {
-      cellule.textContent = "Pas de mesure";
-      cellule.classList.add("absent");
-    } else {
-      cellule.textContent = format(valeur);
-    }
+async function lireJson(url, options) {
+  const reponse = await fetch(url, { cache: "no-store", ...options });
+  if (!reponse.ok) throw new Error(url + " : HTTP " + reponse.status);
+  return reponse.json();
+}
+
+function dureeFr(secondes) {
+  if (secondes < 90) return "moins de 2 minutes";
+  const minutes = Math.round(secondes / 60);
+  if (minutes < 120) return minutes + " minutes";
+  const heures = Math.round(minutes / 60);
+  return heures < 48 ? heures + " heures" : Math.round(heures / 24) + " jours";
+}
+
+function ecrireValeur(element, valeur, format) {
+  if (valeur === null || valeur === undefined) {
+    element.innerHTML = '<span class="absent-texte">Pas de mesure</span>';
+  } else {
+    element.innerHTML = format(valeur);
   }
+}
 
-  function afficherVoyant(id, etat) {
-    afficher(id, etat, e => ETATS[e] || e);
-    if (etat) document.getElementById(id).classList.add("etat-" + etat);
+// ---------- état, voyants et gestes ----------
+const VOYANTS = ["eau", "lumiere", "chaleur"];
+const LIBELLES_ETAT = { ok: "normal", alerte: "alerte", critique: "critique" };
+
+function afficherEtat() {
+  const { dernier, config } = etat;
+  const bandeau = $("#bandeau");
+  const releve = dernier && dernier.releve;
+  if (!releve) {
+    $("#etat").textContent = T.etatGeneral.aucunReleve;
+    $("#meta").textContent = "";
+    $("#voyants").innerHTML = "";
+    $("#section-gestes").hidden = true;
+    bandeau.hidden = true;
+    return;
   }
+  // Ancienneté calculée avec l'heure du téléphone et celle de la DS3231 :
+  // l'horloge du Pi peut être fausse sans Internet (voir RESEAU.md).
+  const age = Math.max(0, (Date.now() - instant(releve.horodatage)) / 1000);
+  $("#meta").textContent = "Dernier relevé : " + formatComplet.format(instant(releve.horodatage))
+    + ", il y a " + dureeFr(age) + ".";
+  bandeau.hidden = age <= dernier.retard_alerte_s;
+  bandeau.textContent = T.etatGeneral.retard(dureeFr(age));
 
-  function dureeFr(secondes) {
-    if (secondes < 90) return "moins de 2 minutes";
-    const minutes = Math.round(secondes / 60);
-    if (minutes < 120) return minutes + " minutes";
-    const heures = Math.round(minutes / 60);
-    if (heures < 48) return heures + " heures";
-    return Math.round(heures / 24) + " jours";
+  const actifs = VOYANTS.filter(v => releve["voyant_" + v] === "alerte" || releve["voyant_" + v] === "critique");
+  $("#etat").textContent = actifs.length ? T.etatGeneral.gestes(actifs.length) : T.etatGeneral.ok;
+
+  $("#voyants").innerHTML = VOYANTS.map(v => {
+    const e = releve["voyant_" + v];
+    const classe = e || "absent";
+    const libelle = e ? LIBELLES_ETAT[e] : "inconnu";
+    return `<span class="voyant"><i class="pastille ${classe}"></i>${T.gestes[v].nom} : ${libelle}</span>`;
+  }).join("");
+
+  $("#section-gestes").hidden = actifs.length === 0;
+  $("#gestes").innerHTML = actifs.map(v => {
+    const e = releve["voyant_" + v];
+    return `<div class="geste"><i class="pastille ${e}"></i><div><strong>${T.gestes[v].nom} : ${LIBELLES_ETAT[e]}</strong>`
+      + `${T.gestes[v][e](config.seuils)}</div></div>`;
+  }).join("");
+}
+
+// ---------- bacs ----------
+function afficherBacs() {
+  const releve = etat.dernier && etat.dernier.releve;
+  const seuil = etat.config.seuils.sol_humidite_min_pct;
+  for (const cle of ["sol_a_humidite_pct", "sol_b_humidite_pct"]) {
+    const valeur = releve ? releve[cle] : null;
+    ecrireValeur(document.querySelector(`[data-valeur="${cle}"]`), valeur,
+      v => nombre(v, 0) + " <small>% d'humidité</small>");
+    const jauge = document.querySelector(`[data-jauge="${cle}"]`);
+    jauge.querySelector("i").style.width = valeur === null ? "0" : Math.min(100, Math.max(0, valeur)) + "%";
+    jauge.querySelector("b").style.left = seuil + "%";
+    jauge.nextElementSibling.textContent = "Arrosage automatique sous " + seuil + " %";
   }
+}
 
-  function heureParis(horodatageUtc) {
-    return new Date(horodatageUtc).toLocaleString("fr-FR", {
-      timeZone: "Europe/Paris", day: "2-digit", month: "2-digit", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
+function afficherChoixPlants() {
+  for (const bac of ["A", "B"]) {
+    const select = document.querySelector(`[data-choix="${bac}"]`);
+    select.innerHTML = etat.disponibles.map(p =>
+      `<option value="${p}"${etat.plants[bac] === p ? " selected" : ""}>${T.plants[p] ? T.plants[p].nom : p}</option>`).join("");
+  }
+  afficherFiches();
+}
+
+async function changerPlant(bac, plant) {
+  const message = document.querySelector(`[data-message="${bac}"]`);
+  message.textContent = "Enregistrement…";
+  try {
+    const reponse = await lireJson("/api/plants", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bac, plant }),
     });
+    etat.plants = reponse.plants;
+    message.textContent = "Enregistré.";
+    afficherFiches();
+  } catch (erreur) {
+    message.textContent = "Échec de l'enregistrement, réessayez.";
+    afficherChoixPlants();
   }
+  setTimeout(() => { message.textContent = ""; }, 3000);
+}
 
-  async function actualiser() {
-    const meta = document.getElementById("meta");
-    const bandeau = document.getElementById("bandeau");
-    try {
-      const reponse = await fetch("/api/releves/dernier", { cache: "no-store" });
-      if (!reponse.ok) throw new Error("HTTP " + reponse.status);
-      const { releve, retard_alerte_s } = await reponse.json();
-      if (!releve) {
-        meta.textContent = "Aucun relevé reçu pour l'instant.";
-        bandeau.classList.remove("visible");
-        return;
-      }
-      // Ancienneté calculée avec l'heure du téléphone et l'heure de la DS3231 :
-      // l'horloge du Pi peut être fausse sans Internet (voir RESEAU.md).
-      const age_s = Math.max(0, (Date.now() - Date.parse(releve.horodatage)) / 1000);
-      meta.textContent = "Dernier relevé : " + heureParis(releve.horodatage)
-        + " (heure de Paris), il y a " + dureeFr(age_s) + ".";
-      if (age_s > retard_alerte_s) {
-        bandeau.textContent = "Aucun nouveau relevé depuis " + dureeFr(age_s)
-          + ". Vérifier que la serre est branchée et que le Wi-Fi fonctionne.";
-        bandeau.classList.add("visible");
-      } else {
-        bandeau.classList.remove("visible");
-      }
-      for (const [id, format] of Object.entries(FORMATS)) afficher(id, releve[id], format);
-      for (const id of ["voyant_eau", "voyant_lumiere", "voyant_chaleur"]) afficherVoyant(id, releve[id]);
-    } catch (erreur) {
-      bandeau.textContent = "Le serveur de la serre ne répond pas. Nouvel essai dans une minute.";
-      bandeau.classList.add("visible");
+function afficherFiches() {
+  $("#fiches").innerHTML = ["A", "B"].map(bac => {
+    const plant = T.plants[etat.plants[bac]];
+    if (!plant) return "";
+    return `<div class="carte fiche"><h3>Bac ${bac} : ${plant.nom}</h3><dl>`
+      + plant.fiche.map(([titre, texte]) => `<dt>${titre}</dt><dd>${texte}</dd>`).join("")
+      + "</dl></div>";
+  }).join("");
+}
+
+// ---------- air et lumière ----------
+function afficherAir() {
+  const releve = etat.dernier && etat.dernier.releve;
+  const r = releve || {};
+  ecrireValeur($("#air_temperature_c"), r.air_temperature_c ?? null, v => nombre(v, 1) + " °C");
+  ecrireValeur($("#air_humidite_pct"), r.air_humidite_pct ?? null, v => nombre(v, 0) + " %");
+  ecrireValeur($("#lumiere_lux"), r.lumiere_lux ?? null, v => nombre(v, 0) + " lux");
+  ecrireValeur($("#ventilateur_actif"), r.ventilateur_actif ?? null, v => v ? "En marche" : "À l'arrêt");
+  ecrireValeur($("#air_pression_hpa"), r.air_pression_hpa ?? null, v => nombre(v, 0) + " hPa");
+  // Eau versée sur les 24 h qui précèdent le dernier point, quelle que soit la période affichée.
+  let eau = null;
+  if (etat.points.length) {
+    const fin = instant(etat.points[etat.points.length - 1].horodatage);
+    eau = etat.points.filter(p => fin - instant(p.horodatage) < 24 * 3600000)
+                     .reduce((somme, p) => somme + (p.arrosage_ml || 0), 0);
+  }
+  ecrireValeur($("#eau_24h"), eau, v => nombre(v, 0) + " ml");
+}
+
+// ---------- courbes (SVG dessiné à la main, sans bibliothèque) ----------
+const NS = "http://www.w3.org/2000/svg";
+function el(nom, attributs, parent) {
+  const e = document.createElementNS(NS, nom);
+  for (const [k, v] of Object.entries(attributs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function graduations(min, max, n) {
+  const pas0 = (max - min) / n;
+  const p = Math.pow(10, Math.floor(Math.log10(pas0)));
+  const pas = [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= pas0) || 10 * p;
+  const debut = Math.floor(min / pas) * pas, fin = Math.ceil(max / pas) * pas;
+  const ticks = [];
+  for (let v = debut; v <= fin + pas / 2; v += pas) ticks.push(+v.toFixed(6));
+  return ticks;
+}
+
+function dessinerCourbe(conteneur, o) {
+  conteneur.innerHTML = "";
+  const points = etat.points.filter(p => o.series.some(s => p[s.cle] !== null && p[s.cle] !== undefined));
+  if (points.length < 2) {
+    conteneur.innerHTML = '<div class="vide">Pas encore assez de relevés pour tracer la courbe.</div>';
+    return;
+  }
+  const style = getComputedStyle(document.documentElement);
+  const couleur = n => style.getPropertyValue(n).trim();
+  if (o.series.length > 1) {
+    const legende = document.createElement("div");
+    legende.className = "legende";
+    legende.innerHTML = o.series.map(s => `<span style="--c:${couleur(s.couleur)}">${s.nom}</span>`).join("");
+    conteneur.appendChild(legende);
+  }
+  const trace = document.createElement("div");
+  trace.className = "trace";
+  conteneur.appendChild(trace);
+
+  const L = Math.max(280, trace.clientWidth || conteneur.clientWidth), H = 190;
+  const m = { g: 44, d: 16, h: 10, b: 26 };
+  const svg = el("svg", { viewBox: `0 0 ${L} ${H}`, role: "img", "aria-label": o.titre }, trace);
+
+  const temps = etat.points.map(p => instant(p.horodatage));
+  const t0 = temps[0], t1 = temps[temps.length - 1];
+  const valeurs = points.flatMap(p => o.series.map(s => p[s.cle])).filter(v => v !== null && v !== undefined);
+  let yMin = o.yMin ?? Math.min(...valeurs), yMax = o.yMax ?? Math.max(...valeurs);
+  for (const v of [o.seuil && o.seuil.valeur, o.bande && o.bande.min, o.bande && o.bande.max]) {
+    if (v !== undefined && v !== null && o.yMin === undefined) { yMin = Math.min(yMin, v); yMax = Math.max(yMax, v); }
+  }
+  if (o.plancherZero) yMin = Math.min(0, yMin);
+  if (yMax - yMin < 1e-9) { yMax += 1; yMin -= 1; }
+  const ticks = graduations(yMin, yMax, 4);
+  yMin = Math.min(yMin, ticks[0]); yMax = Math.max(yMax, ticks[ticks.length - 1]);
+
+  const x = t => m.g + (t - t0) / (t1 - t0) * (L - m.g - m.d);
+  const y = v => m.h + (1 - (v - yMin) / (yMax - yMin)) * (H - m.h - m.b);
+
+  // bande de confort, grille et axe
+  if (o.bande) el("rect", { x: m.g, width: L - m.g - m.d, y: y(o.bande.max), height: y(o.bande.min) - y(o.bande.max),
+                            fill: couleur("--bande") }, svg);
+  for (const v of ticks) {
+    el("line", { x1: m.g, x2: L - m.d, y1: y(v), y2: y(v), stroke: couleur(v === ticks[0] ? "--axe" : "--grille"),
+                 "stroke-width": 1 }, svg);
+    const texte = el("text", { x: m.g - 6, y: y(v) + 4, "text-anchor": "end", "font-size": 11, fill: couleur("--muet") }, svg);
+    texte.textContent = nombre(v, Number.isInteger(v) ? 0 : 1);
+  }
+  // graduations du temps, à l'heure de Paris
+  const pasH = etat.periode === "24h" ? 6 : 24;
+  for (let t = Math.ceil(t0 / 3600000) * 3600000; t <= t1; t += 3600000) {
+    const h = heureParis(t);
+    if (h % pasH !== 0) continue;
+    const texte = el("text", { x: x(t), y: H - 6, "text-anchor": "middle", "font-size": 11, fill: couleur("--muet") }, svg);
+    texte.textContent = etat.periode === "24h" ? h + " h" : formatJour.format(t);
+  }
+  // seuil
+  if (o.seuil) {
+    el("line", { x1: m.g, x2: L - m.d, y1: y(o.seuil.valeur), y2: y(o.seuil.valeur), stroke: couleur("--encre-2"),
+                 "stroke-width": 1, "stroke-dasharray": "4 4" }, svg);
+    o.etiquetteSeuil = o.seuil.libelle;
+  }
+  // courbes, coupées là où il manque des relevés
+  const ecartMax = (etat.periode === "24h" ? 15 : 120) * 60000;
+  for (const s of o.series) {
+    let d = "", precedent = null;
+    for (const p of etat.points) {
+      const v = p[s.cle], t = instant(p.horodatage);
+      if (v === null || v === undefined) { precedent = null; continue; }
+      d += (precedent === null || t - precedent > ecartMax ? "M" : "L") + x(t).toFixed(1) + " " + y(v).toFixed(1) + " ";
+      precedent = t;
     }
+    el("path", { d, fill: "none", stroke: couleur(s.couleur), "stroke-width": 2, "stroke-linejoin": "round",
+                 "stroke-linecap": "round" }, svg);
   }
 
-  actualiser();
+  // étiquette du seuil, par-dessus les courbes, détourée pour rester lisible
+  if (o.seuil) {
+    const texte = el("text", { x: m.g + 6, y: y(o.seuil.valeur) - 6, "font-size": 11, fill: couleur("--encre-2"),
+                               stroke: couleur("--surface"), "stroke-width": 4, "paint-order": "stroke",
+                               "stroke-linejoin": "round" }, svg);
+    texte.textContent = o.etiquetteSeuil;
+  }
+
+  // survol : ligne verticale et bulle avec les valeurs
+  const repere = el("line", { y1: m.h, y2: H - m.b, stroke: couleur("--axe"), "stroke-width": 1, visibility: "hidden" }, svg);
+  const marques = o.series.map(s => el("circle", { r: 4.5, fill: couleur(s.couleur), stroke: couleur("--surface"),
+                                                    "stroke-width": 2, visibility: "hidden" }, svg));
+  const bulle = document.createElement("div");
+  bulle.className = "bulle";
+  bulle.hidden = true;
+  trace.appendChild(bulle);
+  const zone = el("rect", { x: m.g, y: 0, width: L - m.g - m.d, height: H, fill: "transparent" }, svg);
+  const montrer = evenement => {
+    const cadre = svg.getBoundingClientRect();
+    const px = (evenement.clientX - cadre.left) * (L / cadre.width);
+    const t = t0 + (px - m.g) / (L - m.g - m.d) * (t1 - t0);
+    let meilleur = 0;
+    temps.forEach((ti, i) => { if (Math.abs(ti - t) < Math.abs(temps[meilleur] - t)) meilleur = i; });
+    const p = etat.points[meilleur], xp = x(temps[meilleur]);
+    repere.setAttribute("x1", xp); repere.setAttribute("x2", xp); repere.setAttribute("visibility", "visible");
+    o.series.forEach((s, i) => {
+      const v = p[s.cle];
+      marques[i].setAttribute("visibility", v === null || v === undefined ? "hidden" : "visible");
+      if (v !== null && v !== undefined) { marques[i].setAttribute("cx", xp); marques[i].setAttribute("cy", y(v)); }
+    });
+    bulle.innerHTML = `<div>${(etat.periode === "24h" ? formatHeure : formatJourHeure).format(temps[meilleur])}</div>`
+      + o.series.map(s => {
+        const v = p[s.cle];
+        return `<div class="ligne-bulle"><i style="background:${couleur(s.couleur)}"></i>${o.series.length > 1 ? s.nom + " : " : ""}`
+          + (v === null || v === undefined ? "pas de mesure" : nombre(v, o.decimales) + " " + o.unite) + "</div>";
+      }).join("");
+    bulle.hidden = false;
+    const largeur = bulle.offsetWidth, xPix = xp * cadre.width / L;
+    bulle.style.left = Math.min(Math.max(0, xPix + 10 + largeur > cadre.width ? xPix - largeur - 10 : xPix + 10),
+                                cadre.width - largeur) + "px";
+  };
+  const cacher = () => { bulle.hidden = true; repere.setAttribute("visibility", "hidden");
+                         marques.forEach(c => c.setAttribute("visibility", "hidden")); };
+  zone.addEventListener("pointermove", montrer);
+  zone.addEventListener("pointerdown", montrer);
+  zone.addEventListener("pointerleave", cacher);
+
+  // vue en tableau (accessibilité, lecture sans couleur)
+  const details = document.createElement("details");
+  details.innerHTML = `<summary>Voir les valeurs</summary><div class="defile"><table><thead><tr><th>Heure</th>`
+    + o.series.map(s => `<th>${s.nom} (${o.unite})</th>`).join("") + "</tr></thead><tbody>"
+    + etat.points.slice().reverse().map(p => `<tr><td>${formatJourHeure.format(instant(p.horodatage))}</td>`
+      + o.series.map(s => `<td>${p[s.cle] === null || p[s.cle] === undefined ? "—" : nombre(p[s.cle], o.decimales)}</td>`).join("")
+      + "</tr>").join("") + "</tbody></table></div>";
+  conteneur.appendChild(details);
+}
+
+function afficherCourbes() {
+  const s = etat.config.seuils;
+  const nomBac = bac => "Bac " + bac + (T.plants[etat.plants[bac]] ? " (" + T.plants[etat.plants[bac]].nom.toLowerCase() + ")" : "");
+  dessinerCourbe($("#courbe-sol"), {
+    titre: "Humidité de la terre des bacs A et B",
+    series: [{ cle: "sol_a_humidite_pct", nom: nomBac("A"), couleur: "--serie-a" },
+             { cle: "sol_b_humidite_pct", nom: nomBac("B"), couleur: "--serie-b" }],
+    unite: "%", decimales: 0, yMin: 0, yMax: 100,
+    seuil: { valeur: s.sol_humidite_min_pct, libelle: "arrosage sous " + s.sol_humidite_min_pct + " %" },
+  });
+  dessinerCourbe($("#courbe-temperature"), {
+    titre: "Température de l'air",
+    series: [{ cle: "air_temperature_c", nom: "Température", couleur: "--serie-a" }],
+    unite: "°C", decimales: 1,
+    bande: { min: s.air_temperature_min_c, max: s.air_temperature_max_c },
+  });
+  dessinerCourbe($("#courbe-lumiere"), {
+    titre: "Lumière reçue par la serre",
+    series: [{ cle: "lumiere_lux", nom: "Lumière", couleur: "--serie-a" }],
+    unite: "lux", decimales: 0, plancherZero: true,
+    seuil: { valeur: s.lumiere_min_lux, libelle: "seuil " + nombre(s.lumiere_min_lux, 0) + " lux" },
+  });
+}
+
+// ---------- chargement ----------
+async function actualiser() {
+  try {
+    const [dernier, historique] = await Promise.all([
+      lireJson("/api/releves/dernier"), lireJson("/api/historique?periode=" + etat.periode)]);
+    etat.dernier = dernier;
+    etat.points = historique.points;
+    afficherEtat(); afficherBacs(); afficherAir(); afficherCourbes();
+  } catch (erreur) {
+    const bandeau = $("#bandeau");
+    bandeau.textContent = T.etatGeneral.serveurMuet;
+    bandeau.hidden = false;
+  }
+}
+
+async function demarrer() {
+  try {
+    const [config, plants] = await Promise.all([lireJson("/api/config"), lireJson("/api/plants")]);
+    etat.config = config;
+    etat.plants = plants.plants;
+    etat.disponibles = plants.disponibles;
+    afficherChoixPlants();
+  } catch (erreur) {
+    $("#etat").textContent = T.etatGeneral.serveurMuet;
+    return;
+  }
+  await actualiser();
   setInterval(actualiser, ACTUALISATION_MS);
+}
+
+document.querySelectorAll("[data-choix]").forEach(select =>
+  select.addEventListener("change", () => changerPlant(select.dataset.choix, select.value)));
+document.querySelectorAll("[data-periode]").forEach(bouton => bouton.addEventListener("click", () => {
+  etat.periode = bouton.dataset.periode;
+  document.querySelectorAll("[data-periode]").forEach(b => b.setAttribute("aria-pressed", b === bouton));
+  actualiser();
+}));
+let attente;
+window.addEventListener("resize", () => { clearTimeout(attente); attente = setTimeout(() => etat.config && afficherCourbes(), 150); });
+
+demarrer();
 </script>
 </body>
 </html>

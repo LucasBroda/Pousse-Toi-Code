@@ -22,10 +22,14 @@ Responsable : Valentin Delattre. Format des échanges : `00_context/04_contrat_e
 | Route | Pour | Réponse |
 |---|---|---|
 | `POST /api/releves` | ESP32 (contrat) | `200 {"ok": true}`, ou `400` si JSON illisible ou horodatage invalide |
-| `GET /api/config` | ESP32 (contrat) | Seuils et réglages d'arrosage (valeurs provisoires de D-30) |
-| `GET /` | Téléphone | Page web |
+| `GET /api/config` | ESP32 (contrat) | Seuils et réglages d'arrosage (valeurs provisoires de D-30) ; `plant` = plant du bac A |
+| `GET /` et `GET /textes.js` | Téléphone | Page web et ses textes |
 | `GET /api/releves/dernier` | Page web | Dernier relevé et son ancienneté en secondes |
-| `GET /api/releves?limite=N` | Page web (v1) | N derniers relevés, 288 par défaut (24 h), 2016 au plus |
+| `GET /api/releves?limite=N` | Page web | N derniers relevés, 288 par défaut (24 h), 2016 au plus |
+| `GET /api/historique?periode=24h` ou `7j` | Page web | Points des courbes : chaque relevé sur 24 h, moyenne par heure sur 7 jours, fenêtre calée sur le dernier relevé |
+| `GET /api/plants` / `POST /api/plants` | Page web | Plant de chaque bac ; `{"bac": "A", "plant": "radis"}` pour le changer |
+
+Page web v1 (`page/index.html`) : état général et gestes à faire, voyants, humidité des deux bacs avec le seuil, choix du plant par bac, air et lumière, courbes sur 24 h ou 7 jours (SVG dessiné dans la page, sans bibliothèque), fiches de conseils. Tous les textes sont dans `page/textes.js`, provisoires (P-15, conseils de Lucas Manche).
 
 Comportement :
 
