@@ -40,15 +40,20 @@ String url(const char *chemin) {
   return String("http://") + PI_HOST + ":" + PI_PORT + chemin;
 }
 
+// La clé est créée dans l'objet par l'affectation obj[cle] = ... .
+// Ne pas passer obj[cle] en paramètre JsonVariant : pour une clé qui
+// n'existe pas encore, ArduinoJson donne une variante vide, et l'écriture
+// est ignorée sans erreur (la clé manquait alors dans le relevé).
+
 // Une décimale pour température, humidité et pression (contrat v0)
-void ecrire_decimal(JsonVariant cible, float valeur) {
-  if (isnan(valeur)) cible.set(nullptr);
-  else cible.set(serialized(String(valeur, 1)));
+void ecrire_decimal(JsonObject obj, const char *cle, float valeur) {
+  if (isnan(valeur)) obj[cle] = nullptr;
+  else obj[cle] = serialized(String(valeur, 1));
 }
 
-void ecrire_entier(JsonVariant cible, long valeur) {
-  if (valeur == VALEUR_ABSENTE) cible.set(nullptr);
-  else cible.set(valeur);
+void ecrire_entier(JsonObject obj, const char *cle, long valeur) {
+  if (valeur == VALEUR_ABSENTE) obj[cle] = nullptr;
+  else obj[cle] = valeur;
 }
 
 void reglages_par_defaut(Reglages &r) {
@@ -212,16 +217,16 @@ bool reseau_ajouter_releve(const Mesures &m) {
   for (uint8_t b = 0; b < NB_BACS; b++) {
     JsonObject bac = sol.add<JsonObject>();
     bac["bac"] = noms_bacs[b];
-    ecrire_entier(bac["brut"], m.sol_brut[b]);
-    ecrire_decimal(bac["humidite_pct"], m.sol_humidite_pct[b]);
+    ecrire_entier(bac, "brut", m.sol_brut[b]);
+    ecrire_decimal(bac, "humidite_pct", m.sol_humidite_pct[b]);
   }
 
   JsonObject air = doc["air"].to<JsonObject>();
-  ecrire_decimal(air["temperature_c"], m.air_temperature_c);
-  ecrire_decimal(air["humidite_pct"], m.air_humidite_pct);
-  ecrire_decimal(air["pression_hpa"], m.air_pression_hpa);
+  ecrire_decimal(air, "temperature_c", m.air_temperature_c);
+  ecrire_decimal(air, "humidite_pct", m.air_humidite_pct);
+  ecrire_decimal(air, "pression_hpa", m.air_pression_hpa);
 
-  ecrire_entier(doc["lumiere_lux"], m.lumiere_lux);
+  ecrire_entier(doc.as<JsonObject>(), "lumiere_lux", m.lumiere_lux);
   doc["ventilateur_actif"] = ventilateur_actif();
 
   uint32_t ml, secondes;
