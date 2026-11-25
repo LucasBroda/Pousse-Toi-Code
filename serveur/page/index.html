@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Serre Autonome</title>
+<link rel="icon" href="data:,">
+<!-- Page web v0 : dernière mesure. Aucune ressource externe (réseau local seulement). -->
+<style>
+  :root {
+    --fond: #f6f5f1; --carte: #ffffff; --texte: #1d1f1c; --discret: #62665f;
+    --filet: #dcdad3; --ok: #2f7a3e; --alerte: #a86a00; --critique: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fond: #141513; --carte: #1e201d; --texte: #ecebe6; --discret: #a3a69f;
+      --filet: #33362f; --ok: #6cc17d; --alerte: #e0a640; --critique: #f2817a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fond); color: var(--texte);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--discret); margin: 0 0 10px; font-weight: 600; }
+  .meta { color: var(--discret); margin: 0 0 18px; font-size: .95rem; }
+  .bandeau { border: 1px solid var(--alerte); color: var(--alerte); border-radius: 8px;
+             padding: 10px 12px; margin: 0 0 16px; display: none; }
+  .bandeau.visible { display: block; }
+  section { background: var(--carte); border: 1px solid var(--filet); border-radius: 10px;
+            padding: 14px 16px; margin-bottom: 14px; }
+  dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; }
+  dt { color: var(--discret); }
+  dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .absent { color: var(--discret); font-weight: 400; }
+  .etat-ok { color: var(--ok); } .etat-alerte { color: var(--alerte); }
+  .etat-critique { color: var(--critique); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Serre Autonome</h1>
+  <p class="meta" id="meta">Chargement…</p>
+  <p class="bandeau" id="bandeau"></p>
+
+  <section>
+    <h2>Voyants</h2>
+    <dl>
+      <dt>Eau</dt><dd id="voyant_eau">—</dd>
+      <dt>Lumière</dt><dd id="voyant_lumiere">—</dd>
+      <dt>Chaleur</dt><dd id="voyant_chaleur">—</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Sol</h2>
+    <dl>
+      <dt>Bac A (salade)</dt><dd id="sol_a_humidite_pct">—</dd>
+      <dt>Bac B (radis)</dt><dd id="sol_b_humidite_pct">—</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Air et lumière</h2>
+    <dl>
+      <dt>Température</dt><dd id="air_temperature_c">—</dd>
+      <dt>Humidité de l'air</dt><dd id="air_humidite_pct">—</dd>
+      <dt>Pression</dt><dd id="air_pression_hpa">—</dd>
+      <dt>Lumière</dt><dd id="lumiere_lux">—</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Actionneurs</h2>
+    <dl>
+      <dt>Ventilateur</dt><dd id="ventilateur_actif">—</dd>
+      <dt>Eau versée depuis le relevé précédent</dt><dd id="arrosage_ml">—</dd>
+    </dl>
+  </section>
+</main>
+
+<script>
+  "use strict";
+  const ACTUALISATION_MS = 60 * 1000;
+  const ETATS = { ok: "Normal", alerte: "Alerte", critique: "Critique" };
+  const nombreFr = (v, decimales) => v.toLocaleString("fr-FR",
+    { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+
+  // Format d'affichage de chaque valeur ; null = capteur absent ou en panne.
+  const FORMATS = {
+    sol_a_humidite_pct: v => nombreFr(v, 1) + " %",
+    sol_b_humidite_pct: v => nombreFr(v, 1) + " %",
+    air_temperature_c: v => nombreFr(v, 1) + " °C",
+    air_humidite_pct: v => nombreFr(v, 1) + " %",
+    air_pression_hpa: v => nombreFr(v, 1) + " hPa",
+    lumiere_lux: v => nombreFr(v, 0) + " lux",
+    ventilateur_actif: v => v ? "En marche" : "À l'arrêt",
+    arrosage_ml: v => nombreFr(v, 0) + " ml",
+  };
+
+  function afficher(id, valeur, format) {
+    const cellule = document.getElementById(id);
+    cellule.className = "";
+    if (valeur === null || valeur === undefined) {
+      cellule.textContent = "Pas de mesure";
+      cellule.classList.add("absent");
+    } else {
+      cellule.textContent = format(valeur);
+    }
+  }
+
+  function afficherVoyant(id, etat) {
+    afficher(id, etat, e => ETATS[e] || e);
+    if (etat) document.getElementById(id).classList.add("etat-" + etat);
+  }
+
+  function dureeFr(secondes) {
+    if (secondes < 90) return "moins de 2 minutes";
+    const minutes = Math.round(secondes / 60);
+    if (minutes < 120) return minutes + " minutes";
+    const heures = Math.round(minutes / 60);
+    if (heures < 48) return heures + " heures";
+    return Math.round(heures / 24) + " jours";
+  }
+
+  function heureParis(horodatageUtc) {
+    return new Date(horodatageUtc).toLocaleString("fr-FR", {
+      timeZone: "Europe/Paris", day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  async function actualiser() {
+    const meta = document.getElementById("meta");
+    const bandeau = document.getElementById("bandeau");
+    try {
+      const reponse = await fetch("/api/releves/dernier", { cache: "no-store" });
+      if (!reponse.ok) throw new Error("HTTP " + reponse.status);
+      const { releve, retard_alerte_s } = await reponse.json();
+      if (!releve) {
+        meta.textContent = "Aucun relevé reçu pour l'instant.";
+        bandeau.classList.remove("visible");
+        return;
+      }
+      // Ancienneté calculée avec l'heure du téléphone et l'heure de la DS3231 :
+      // l'horloge du Pi peut être fausse sans Internet (voir RESEAU.md).
+      const age_s = Math.max(0, (Date.now() - Date.parse(releve.horodatage)) / 1000);
+      meta.textContent = "Dernier relevé : " + heureParis(releve.horodatage)
+        + " (heure de Paris), il y a " + dureeFr(age_s) + ".";
+      if (age_s > retard_alerte_s) {
+        bandeau.textContent = "Aucun nouveau relevé depuis " + dureeFr(age_s)
+          + ". Vérifier que la serre est branchée et que le Wi-Fi fonctionne.";
+        bandeau.classList.add("visible");
+      } else {
+        bandeau.classList.remove("visible");
+      }
+      for (const [id, format] of Object.entries(FORMATS)) afficher(id, releve[id], format);
+      for (const id of ["voyant_eau", "voyant_lumiere", "voyant_chaleur"]) afficherVoyant(id, releve[id]);
+    } catch (erreur) {
+      bandeau.textContent = "Le serveur de la serre ne répond pas. Nouvel essai dans une minute.";
+      bandeau.classList.add("visible");
+    }
+  }
+
+  actualiser();
+  setInterval(actualiser, ACTUALISATION_MS);
+</script>
+</body>
+</html>

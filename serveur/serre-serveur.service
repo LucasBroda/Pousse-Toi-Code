@@ -1,0 +1,17 @@
+# Service systemd : démarre le serveur Serre Autonome au démarrage du Pi
+# et le relance s'il s'arrête. Remplacer UTILISATEUR par le compte du Pi
+# (voir README.md, étape 3).
+[Unit]
+Description=Serveur Serre Autonome
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=UTILISATEUR
+WorkingDirectory=/home/UTILISATEUR/serre-autonome/serveur
+ExecStart=/usr/bin/python3 serveur.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
