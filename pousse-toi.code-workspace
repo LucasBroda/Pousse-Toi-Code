@@ -1,0 +1,16 @@
+{
+	// Espace de travail VS Code du dépôt : ouvrir ce fichier (Fichier >
+	// Ouvrir l'espace de travail à partir d'un fichier) plutôt que le dossier
+	// racine, pour que PlatformIO reconnaisse le projet firmware/ et que
+	// l'autocomplétion trouve Arduino.h et les bibliothèques.
+	// Ajouter le dossier serveur/ ici une fois la PR n°2 fusionnée.
+	"folders": [
+		{ "name": "firmware (ESP32)", "path": "firmware" },
+		{ "name": "racine du dépôt", "path": "." }
+	],
+	"settings": {
+		"files.exclude": {
+			"firmware": true
+		}
+	}
+}
