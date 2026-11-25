@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <ctype.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,7 +28,8 @@ void afficher_aide() {
       "  sol                       calibration : 10 lectures brutes des bacs A et B\n"
       "  buzzer                    test du type de buzzer (P-16)\n"
       "  voyants                   allume chaque voyant 1 s\n"
-      "  pompe <s>                 pompe pendant <s> secondes (test à vide, 120 s max)\n"
+      "  pompe A <s> | pompe B <s> pompe du bac A ou B pendant <s> secondes (120 s max)\n"
+      "                            ex. « pompe A 60 » : mesure du débit dans un verre doseur\n"
       "  ventilateur <s>           ventilateur pendant <s> secondes\n"
       "  ventilateur auto          retour en automatique\n"
       "  heure                     heure de la DS3231\n"
@@ -55,9 +57,13 @@ void afficher_etat(const Mesures &m, const Reglages &r) {
                 texte_valeur(m.air_humidite_pct, t2, sizeof(t2)));
   Serial.printf("%s hPa | lumière %ld lux\n", texte_valeur(m.air_pression_hpa, t1, sizeof(t1)),
                 m.lumiere_lux);
-  Serial.printf("Ventilateur %s | pompe %s | %lu ml arrosés aujourd'hui\n",
-                ventilateur_actif() ? "marche" : "arrêt", pompe_active() ? "marche" : "arrêt",
-                (unsigned long)arrosage_ml_aujourdhui());
+  Serial.printf("Ventilateur %s | pompe A %s | pompe B %s\n", ventilateur_actif() ? "marche" : "arrêt",
+                pompe_bac_active(BAC_A) ? "marche" : "arrêt",
+                pompe_bac_active(BAC_B) ? "marche" : "arrêt");
+  Serial.printf("Arrosé aujourd'hui : bac A %lu ml, bac B %lu ml (max %lu ml par bac)\n",
+                (unsigned long)arrosage_ml_aujourdhui(BAC_A),
+                (unsigned long)arrosage_ml_aujourdhui(BAC_B),
+                (unsigned long)ARROSAGE_MAX_ML_PAR_JOUR_PAR_BAC);
   Serial.printf("Voyants : eau %s, lumière %s, chaleur %s\n",
                 texte_etat_voyant(etat_voyant(VOYANT_EAU)),
                 texte_etat_voyant(etat_voyant(VOYANT_LUMIERE)),
@@ -128,9 +134,16 @@ void executer(char *commande, Mesures &mesures, Reglages &reglages) {
   else if (!strcmp(commande, "buzzer")) signalisation_tester_buzzer();
   else if (!strcmp(commande, "voyants")) signalisation_tester_voyants();
   else if (!strcmp(commande, "pompe")) {
-    uint32_t s = argument ? strtoul(argument, nullptr, 10) : 0;
-    if (pompe_tester(s)) Serial.printf("[test] pompe en marche %lu s\n", (unsigned long)s);
-    else Serial.println("[test] refusé : pompe déjà en marche, ou durée hors de 1 à 120 s");
+    // Format : « pompe A 60 » ou « pompe B 60 »
+    char bac = argument ? toupper(argument[0]) : '\0';
+    uint32_t s = (argument && argument[1] == ' ') ? strtoul(argument + 2, nullptr, 10) : 0;
+    if (bac != 'A' && bac != 'B') {
+      Serial.println("[test] format : « pompe A <s> » ou « pompe B <s> »");
+    } else if (pompe_tester(bac == 'A' ? BAC_A : BAC_B, s)) {
+      Serial.printf("[test] pompe %c en marche %lu s\n", bac, (unsigned long)s);
+    } else {
+      Serial.println("[test] refusé : une pompe tourne déjà, ou durée hors de 1 à 120 s");
+    }
   } else if (!strcmp(commande, "ventilateur")) {
     if (argument && !strcmp(argument, "auto")) {
       ventilateur_forcer(MODE_AUTO, 0);

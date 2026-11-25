@@ -15,7 +15,10 @@ constexpr uint8_t BROCHE_I2C_SDA = 21;
 constexpr uint8_t BROCHE_I2C_SCL = 22;
 constexpr uint8_t BROCHE_SOL_BAC_A = 34;   // ADC1, utilisable Wi-Fi actif
 constexpr uint8_t BROCHE_SOL_BAC_B = 35;   // ADC1, utilisable Wi-Fi actif
-constexpr uint8_t BROCHE_MOSFET_POMPE = 16;
+// Une pompe par bac (D-35). Pompe A : GPIO 16 (PROPOSÉ, 03_architecture.md).
+// Pompe B : GPIO 18 PROVISOIRE, broche à valider par Axel Fournier.
+constexpr uint8_t BROCHE_MOSFET_POMPE_A = 16;
+constexpr uint8_t BROCHE_MOSFET_POMPE_B = 18;
 constexpr uint8_t BROCHE_MOSFET_VENTILATEUR = 17;
 constexpr uint8_t BROCHE_VOYANT_EAU = 25;
 constexpr uint8_t BROCHE_VOYANT_LUMIERE = 26;
@@ -48,16 +51,29 @@ constexpr float DEFAUT_AIR_TEMPERATURE_MIN_C = 8.0f;
 constexpr float DEFAUT_AIR_TEMPERATURE_MAX_C = 25.0f;   // démarrage du ventilateur
 constexpr float DEFAUT_AIR_HUMIDITE_MAX_PCT = 80.0f;    // démarrage du ventilateur
 constexpr float DEFAUT_LUMIERE_MIN_LUX = 2000.0f;
-constexpr float DEFAUT_DEBIT_ML_MIN = 85.0f;            // théorique, pompe pas reçue
-constexpr float DEFAUT_DOSE_ML = 100.0f;
+constexpr float DEFAUT_DOSE_ML = 100.0f;                // par bac, une pompe par bac (D-35)
 constexpr float DEFAUT_DELAI_ENTRE_DOSES_MIN = 60.0f;
 
 // Recommandations de D-30, hors contrat
 constexpr float VENTILATEUR_ARRET_TEMPERATURE_C = 23.0f;  // hystérésis
 constexpr float VENTILATEUR_ARRET_HUMIDITE_PCT = 75.0f;   // hystérésis
-// D-30 dit « 500 ml par jour et par bac ». Une seule pompe alimente les deux
-// bacs : par prudence, 500 ml au total par jour (question ouverte, voir journal).
-constexpr uint32_t ARROSAGE_MAX_ML_PAR_JOUR = 500;
+// D-30 : au plus 500 ml par jour et par bac. Avec une pompe par bac (D-35),
+// chaque bac a sa propre limite.
+constexpr uint32_t ARROSAGE_MAX_ML_PAR_JOUR_PAR_BAC = 500;
+
+// ============================================================
+// Pompes péristaltiques 12 V DC Telituny (A5, D-35), une par bac
+// ============================================================
+// Débit de chaque pompe, en ml/min. Valeur ANNONCÉE par le vendeur
+// (« jusqu'à 90 ml/min ») : mesurer chaque pompe pendant 1 minute dans un
+// verre doseur (D-15, commande « pompe A 60 ») et remplacer ici.
+// Le débit est propre à chaque pompe : il est réglé ici et non par le Pi
+// (le debit_ml_min unique du contrat v0 est ignoré, voir reseau.cpp).
+constexpr float DEBIT_POMPE_A_ML_MIN = 90.0f;
+constexpr float DEBIT_POMPE_B_ML_MIN = 90.0f;
+// Les deux pompes ne tournent jamais en même temps : le bac B attend la fin
+// de la dose du bac A. Limite l'appel de courant sur l'alimentation 12 V 3 A
+// (D-16), partagée avec le ventilateur.
 
 // Lumière évaluée de jour seulement (D-30). PROVISOIRE : 8h-16h UTC,
 // soit 9h-17h à Paris en hiver.

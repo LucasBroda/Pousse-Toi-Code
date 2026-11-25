@@ -58,7 +58,6 @@ void reglages_par_defaut(Reglages &r) {
   r.air_temperature_max_c = DEFAUT_AIR_TEMPERATURE_MAX_C;
   r.air_humidite_max_pct = DEFAUT_AIR_HUMIDITE_MAX_PCT;
   r.lumiere_min_lux = DEFAUT_LUMIERE_MIN_LUX;
-  r.debit_ml_min = DEFAUT_DEBIT_ML_MIN;
   r.dose_ml = DEFAUT_DOSE_ML;
   r.delai_entre_doses_min = DEFAUT_DELAI_ENTRE_DOSES_MIN;
 }
@@ -153,7 +152,9 @@ bool demander_config(Reglages &reglages) {
   lire_nombre(seuils["air_humidite_max_pct"], r.air_humidite_max_pct);
   lire_nombre(seuils["lumiere_min_lux"], r.lumiere_min_lux);
   JsonObjectConst arrosage = doc["arrosage"];
-  lire_nombre(arrosage["debit_ml_min"], r.debit_ml_min);
+  // debit_ml_min est ignoré : avec une pompe par bac (D-35), chaque pompe a
+  // son propre débit mesuré, réglé dans config.h. dose_ml et le délai
+  // s'appliquent à chaque bac.
   lire_nombre(arrosage["dose_ml"], r.dose_ml);
   lire_nombre(arrosage["delai_entre_doses_min"], r.delai_entre_doses_min);
 
@@ -260,7 +261,8 @@ void reglages_afficher(const Reglages &r) {
                 "lumière min %.0f lux\n",
                 r.plant, r.sol_humidite_min_pct, r.air_temperature_min_c, r.air_temperature_max_c,
                 r.air_humidite_max_pct, r.lumiere_min_lux);
-  Serial.printf("  arrosage : débit %.0f ml/min, dose %.0f ml, délai %.0f min, max %lu ml/jour\n",
-                r.debit_ml_min, r.dose_ml, r.delai_entre_doses_min,
-                (unsigned long)ARROSAGE_MAX_ML_PAR_JOUR);
+  Serial.printf("  arrosage par bac : dose %.0f ml, délai %.0f min, max %lu ml/jour\n", r.dose_ml,
+                r.delai_entre_doses_min, (unsigned long)ARROSAGE_MAX_ML_PAR_JOUR_PAR_BAC);
+  Serial.printf("  débit des pompes : A %.0f ml/min, B %.0f ml/min (config.h)\n",
+                DEBIT_POMPE_A_ML_MIN, DEBIT_POMPE_B_ML_MIN);
 }

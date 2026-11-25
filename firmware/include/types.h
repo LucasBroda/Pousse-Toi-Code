@@ -20,7 +20,9 @@ struct Mesures {
   long lumiere_lux;
 };
 
-// Seuils et réglages d'arrosage (GET /api/config du contrat v0)
+// Seuils et réglages d'arrosage (GET /api/config du contrat v0).
+// La dose et le délai s'appliquent à chaque bac (une pompe par bac, D-35).
+// Le débit, propre à chaque pompe, est dans config.h.
 struct Reglages {
   char plant[24];
   float sol_humidite_min_pct;
@@ -28,7 +30,6 @@ struct Reglages {
   float air_temperature_max_c;
   float air_humidite_max_pct;
   float lumiere_min_lux;
-  float debit_ml_min;
   float dose_ml;
   float delai_entre_doses_min;
 };

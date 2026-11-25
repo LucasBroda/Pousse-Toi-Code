@@ -15,24 +15,35 @@ uint32_t ventilation_debut_ms = 0;
 ModeForce ventilateur_mode = MODE_AUTO;
 uint32_t ventilateur_force_fin_ms = 0;
 
-// --- Pompe ---
-bool pompe = false;
-bool pompe_en_test = false;
-uint32_t pompe_debut_ms = 0;
-uint32_t pompe_duree_ms = 0;
-float pompe_debit_ml_min = DEFAUT_DEBIT_ML_MIN;
-bool dose_deja_faite = false;
-uint32_t derniere_dose_ms = 0;
+// --- Pompes : une par bac (D-35) ---
+struct Pompe {
+  uint8_t broche;
+  float debit_ml_min;  // config.h, mesuré pour chaque pompe
+  char nom;            // 'A' ou 'B'
+  bool active;
+  bool en_test;
+  uint32_t debut_ms;
+  uint32_t duree_ms;
+  // Dose décidée pendant que l'autre pompe tournait : lancée juste après
+  bool dose_en_attente;
+  uint32_t attente_duree_ms;
+  bool dose_deja_faite;
+  uint32_t derniere_dose_ms;
+  uint32_t ml_jour;    // gardé en mémoire non volatile
+  uint32_t releve_ml;  // depuis le dernier relevé
+  uint32_t releve_ms;
+};
 
-// Compteurs pour le relevé suivant
-uint32_t releve_ml = 0;
-uint32_t releve_ms = 0;
+Pompe pompes[NB_BACS] = {
+    {BROCHE_MOSFET_POMPE_A, DEBIT_POMPE_A_ML_MIN, 'A'},
+    {BROCHE_MOSFET_POMPE_B, DEBIT_POMPE_B_ML_MIN, 'B'},
+};
+const char *CLES_ML_JOUR[NB_BACS] = {"ml_a", "ml_b"};
 
-// Compteur journalier, gardé en mémoire non volatile pour qu'un redémarrage
-// en boucle ne fasse pas arroser au-delà de la limite du jour
+// Compteur journalier en mémoire non volatile : un redémarrage en boucle
+// ne fait pas arroser au-delà de la limite du jour
 Preferences memoire;
 long jour_courant = 0;
-uint32_t ml_jour = 0;
 
 // --- Voyants ---
 EtatVoyant voyants[NB_VOYANTS] = {VOYANT_OK, VOYANT_OK, VOYANT_OK};
@@ -48,43 +59,63 @@ void piloter_ventilateur(bool marche) {
 
 void enregistrer_ml_jour() {
   memoire.putLong("jour", jour_courant);
-  memoire.putUInt("ml", ml_jour);
+  for (uint8_t b = 0; b < NB_BACS; b++) memoire.putUInt(CLES_ML_JOUR[b], pompes[b].ml_jour);
 }
 
 void verifier_changement_jour() {
   long jour = horloge_numero_jour();
   if (jour != jour_courant) {
     jour_courant = jour;
-    ml_jour = 0;
+    for (Pompe &p : pompes) p.ml_jour = 0;
     enregistrer_ml_jour();
   }
 }
 
-void demarrer_pompe(uint32_t duree_ms, bool test) {
-  pompe = true;
-  pompe_en_test = test;
-  pompe_debut_ms = millis();
-  pompe_duree_ms = duree_ms;
-  digitalWrite(BROCHE_MOSFET_POMPE, HIGH);
+bool une_pompe_tourne() {
+  for (const Pompe &p : pompes) {
+    if (p.active) return true;
+  }
+  return false;
 }
 
-void arreter_pompe() {
-  digitalWrite(BROCHE_MOSFET_POMPE, LOW);
-  if (!pompe) return;
-  pompe = false;
-  uint32_t duree = millis() - pompe_debut_ms;
-  if (pompe_en_test) {
-    Serial.printf("[pompe] test terminé après %lu s\n", (unsigned long)(duree / 1000));
+void demarrer_pompe(Pompe &p, uint32_t duree_ms, bool test) {
+  p.active = true;
+  p.en_test = test;
+  p.dose_en_attente = false;
+  p.debut_ms = millis();
+  p.duree_ms = duree_ms;
+  digitalWrite(p.broche, HIGH);
+}
+
+void arreter_pompe(Pompe &p) {
+  digitalWrite(p.broche, LOW);
+  if (!p.active) return;
+  p.active = false;
+  uint32_t duree = millis() - p.debut_ms;
+  if (p.en_test) {
+    Serial.printf("[pompe %c] test terminé après %lu s\n", p.nom, (unsigned long)(duree / 1000));
     return;
   }
   // Volume = durée × débit (D-15, pas de débitmètre)
-  uint32_t ml = lroundf(duree / 60000.0f * pompe_debit_ml_min);
-  releve_ml += ml;
-  releve_ms += duree;
-  ml_jour += ml;
+  uint32_t ml = lroundf(duree / 60000.0f * p.debit_ml_min);
+  p.releve_ml += ml;
+  p.releve_ms += duree;
+  p.ml_jour += ml;
   enregistrer_ml_jour();
-  Serial.printf("[pompe] dose terminée : %lu ml en %lu s (%lu ml aujourd'hui)\n",
-                (unsigned long)ml, (unsigned long)(duree / 1000), (unsigned long)ml_jour);
+  Serial.printf("[pompe %c] dose terminée : %lu ml en %lu s (%lu ml aujourd'hui)\n", p.nom,
+                (unsigned long)ml, (unsigned long)(duree / 1000), (unsigned long)p.ml_jour);
+}
+
+// Lance la dose en attente d'un bac dès que plus aucune pompe ne tourne
+void lancer_dose_en_attente() {
+  if (une_pompe_tourne()) return;
+  for (Pompe &p : pompes) {
+    if (p.dose_en_attente) {
+      Serial.printf("[pompe %c] dose en attente lancée\n", p.nom);
+      demarrer_pompe(p, p.attente_duree_ms, false);
+      return;
+    }
+  }
 }
 
 // --- Ventilation sur seuil, avec hystérésis (D-30) ---
@@ -107,37 +138,47 @@ void reguler_ventilation(const Mesures &m, const Reglages &r) {
   }
 }
 
-// --- Arrosage par durée (D-15) ---
-bool un_bac_trop_sec(const Mesures &m, const Reglages &r) {
-  for (uint8_t b = 0; b < NB_BACS; b++) {
-    if (!isnan(m.sol_humidite_pct[b]) && m.sol_humidite_pct[b] < r.sol_humidite_min_pct) return true;
-  }
-  return false;
+// --- Arrosage par durée, bac par bac (D-15, D-35) ---
+bool bac_trop_sec(const Mesures &m, const Reglages &r, uint8_t b) {
+  return !isnan(m.sol_humidite_pct[b]) && m.sol_humidite_pct[b] < r.sol_humidite_min_pct;
 }
 
-void reguler_arrosage(const Mesures &m, const Reglages &r) {
-  if (pompe || !un_bac_trop_sec(m, r)) return;
+void reguler_arrosage_bac(const Mesures &m, const Reglages &r, uint8_t b) {
+  Pompe &p = pompes[b];
+  if (p.active || p.dose_en_attente || !bac_trop_sec(m, r, b)) return;
   uint32_t delai_ms = uint32_t(r.delai_entre_doses_min * 60000.0f);
-  if (dose_deja_faite && millis() - derniere_dose_ms < delai_ms) return;
-  if (ml_jour >= ARROSAGE_MAX_ML_PAR_JOUR || r.debit_ml_min <= 0) return;
+  if (p.dose_deja_faite && millis() - p.derniere_dose_ms < delai_ms) return;
+  if (p.ml_jour >= ARROSAGE_MAX_ML_PAR_JOUR_PAR_BAC || p.debit_ml_min <= 0) return;
 
-  float dose = min(r.dose_ml, float(ARROSAGE_MAX_ML_PAR_JOUR - ml_jour));
-  uint32_t duree_ms = uint32_t(dose / r.debit_ml_min * 60000.0f);
+  float dose = min(r.dose_ml, float(ARROSAGE_MAX_ML_PAR_JOUR_PAR_BAC - p.ml_jour));
+  uint32_t duree_ms = uint32_t(dose / p.debit_ml_min * 60000.0f);
   if (duree_ms == 0) return;
-  pompe_debit_ml_min = r.debit_ml_min;
-  dose_deja_faite = true;
-  derniere_dose_ms = millis();
-  demarrer_pompe(duree_ms, false);
-  Serial.printf("[pompe] dose de %.0f ml : %lu s de pompage\n", dose, (unsigned long)(duree_ms / 1000));
+  p.dose_deja_faite = true;
+  p.derniere_dose_ms = millis();
+  Serial.printf("[pompe %c] dose de %.0f ml : %lu s de pompage\n", p.nom, dose,
+                (unsigned long)(duree_ms / 1000));
+  if (une_pompe_tourne()) {
+    // Jamais deux pompes à la fois : celle-ci attend la fin de l'autre
+    p.dose_en_attente = true;
+    p.attente_duree_ms = duree_ms;
+    Serial.printf("[pompe %c] en attente de la fin de l'autre pompe\n", p.nom);
+  } else {
+    demarrer_pompe(p, duree_ms, false);
+  }
 }
 
 // --- Voyants (sens PROPOSÉ du contrat v0, règles PROVISOIRES, P-15) ---
 EtatVoyant evaluer_eau(const Mesures &m, const Reglages &r) {
   bool aucune_sonde = isnan(m.sol_humidite_pct[BAC_A]) && isnan(m.sol_humidite_pct[BAC_B]);
   if (aucune_sonde) return VOYANT_ALERTE;  // capteur à vérifier
-  if (!un_bac_trop_sec(m, r)) return VOYANT_OK;
-  // Sol sec alors que la limite du jour est atteinte : intervention nécessaire
-  return ml_jour >= ARROSAGE_MAX_ML_PAR_JOUR ? VOYANT_CRITIQUE : VOYANT_ALERTE;
+  EtatVoyant etat = VOYANT_OK;
+  for (uint8_t b = 0; b < NB_BACS; b++) {
+    if (!bac_trop_sec(m, r, b)) continue;
+    // Sol sec alors que la limite du jour de ce bac est atteinte : intervention nécessaire
+    if (pompes[b].ml_jour >= ARROSAGE_MAX_ML_PAR_JOUR_PAR_BAC) return VOYANT_CRITIQUE;
+    etat = VOYANT_ALERTE;
+  }
+  return etat;
 }
 
 EtatVoyant evaluer_lumiere(const Mesures &m, const Reglages &r, EtatVoyant precedent) {
@@ -169,30 +210,36 @@ EtatVoyant evaluer_chaleur(const Mesures &m, const Reglages &r) {
 }  // namespace
 
 void regulation_demarrer() {
-  // Pompe et ventilateur à l'arrêt dès le démarrage (03_architecture.md)
-  digitalWrite(BROCHE_MOSFET_POMPE, LOW);
+  // Pompes et ventilateur à l'arrêt dès le démarrage (03_architecture.md)
+  for (const Pompe &p : pompes) {
+    digitalWrite(p.broche, LOW);
+    pinMode(p.broche, OUTPUT);
+  }
   digitalWrite(BROCHE_MOSFET_VENTILATEUR, LOW);
-  pinMode(BROCHE_MOSFET_POMPE, OUTPUT);
   pinMode(BROCHE_MOSFET_VENTILATEUR, OUTPUT);
 
   memoire.begin("arrosage", false);
   jour_courant = memoire.getLong("jour", 0);
-  ml_jour = memoire.getUInt("ml", 0);
+  for (uint8_t b = 0; b < NB_BACS; b++) pompes[b].ml_jour = memoire.getUInt(CLES_ML_JOUR[b], 0);
   verifier_changement_jour();
-  Serial.printf("[pompe] déjà %lu ml arrosés aujourd'hui\n", (unsigned long)ml_jour);
+  Serial.printf("[pompes] aujourd'hui : bac A %lu ml, bac B %lu ml\n",
+                (unsigned long)pompes[BAC_A].ml_jour, (unsigned long)pompes[BAC_B].ml_jour);
 }
 
 void regulation_appliquer(const Mesures &mesures, const Reglages &reglages) {
   verifier_changement_jour();
   reguler_ventilation(mesures, reglages);
-  reguler_arrosage(mesures, reglages);
+  for (uint8_t b = 0; b < NB_BACS; b++) reguler_arrosage_bac(mesures, reglages, b);
   voyants[VOYANT_EAU] = evaluer_eau(mesures, reglages);
   voyants[VOYANT_LUMIERE] = evaluer_lumiere(mesures, reglages, voyants[VOYANT_LUMIERE]);
   voyants[VOYANT_CHALEUR] = evaluer_chaleur(mesures, reglages);
 }
 
 void regulation_surveiller() {
-  if (pompe && millis() - pompe_debut_ms >= pompe_duree_ms) arreter_pompe();
+  for (Pompe &p : pompes) {
+    if (p.active && millis() - p.debut_ms >= p.duree_ms) arreter_pompe(p);
+  }
+  lancer_dose_en_attente();
   // Comparaison signée : reste juste au passage de millis() par zéro (49 jours)
   if (ventilateur_mode != MODE_AUTO && int32_t(millis() - ventilateur_force_fin_ms) >= 0) {
     ventilateur_mode = MODE_AUTO;
@@ -202,20 +249,26 @@ void regulation_surveiller() {
 }
 
 bool ventilateur_actif() { return ventilateur; }
-bool pompe_active() { return pompe; }
+bool pompe_active() { return une_pompe_tourne(); }
+bool pompe_bac_active(Bac bac) { return pompes[bac].active; }
 EtatVoyant etat_voyant(Voyant voyant) { return voyants[voyant]; }
-uint32_t arrosage_ml_aujourdhui() { return ml_jour; }
+uint32_t arrosage_ml_aujourdhui(Bac bac) { return pompes[bac].ml_jour; }
 
 void arrosage_prelever_compteurs(uint32_t &ml, uint32_t &secondes) {
-  ml = releve_ml;
-  secondes = releve_ms / 1000;
-  releve_ml = 0;
-  releve_ms = 0;
+  uint32_t total_ms = 0;
+  ml = 0;
+  for (Pompe &p : pompes) {
+    ml += p.releve_ml;
+    total_ms += p.releve_ms;
+    p.releve_ml = 0;
+    p.releve_ms = 0;
+  }
+  secondes = total_ms / 1000;
 }
 
-bool pompe_tester(uint32_t secondes) {
-  if (pompe || secondes == 0 || secondes > TEST_ACTIONNEUR_MAX_S) return false;
-  demarrer_pompe(secondes * 1000UL, true);
+bool pompe_tester(Bac bac, uint32_t secondes) {
+  if (une_pompe_tourne() || secondes == 0 || secondes > TEST_ACTIONNEUR_MAX_S) return false;
+  demarrer_pompe(pompes[bac], secondes * 1000UL, true);
   return true;
 }
 
