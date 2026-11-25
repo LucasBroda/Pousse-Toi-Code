@@ -33,11 +33,12 @@ void lire_et_reguler() {
 }  // namespace
 
 void setup() {
-  // Actionneurs à l'arrêt avant toute autre chose
+  // Port série ouvert d'abord (instantané) pour ne perdre aucun message,
+  // puis actionneurs mis à l'arrêt avant toute autre chose
+  Serial.begin(115200);
   regulation_demarrer();
   signalisation_demarrer();
 
-  Serial.begin(115200);
   delay(200);
   Serial.println("\n=== Serre Autonome — firmware v0.2 ===");
 

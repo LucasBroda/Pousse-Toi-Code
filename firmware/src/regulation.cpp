@@ -221,7 +221,9 @@ void regulation_demarrer() {
   memoire.begin("arrosage", false);
   jour_courant = memoire.getLong("jour", 0);
   for (uint8_t b = 0; b < NB_BACS; b++) pompes[b].ml_jour = memoire.getUInt(CLES_ML_JOUR[b], 0);
-  verifier_changement_jour();
+  // Pas de verifier_changement_jour() ici : la DS3231 n'est pas encore
+  // démarrée, le jour serait faux et le compteur remis à zéro à chaque
+  // redémarrage. Il est vérifié à la première régulation, après l'horloge.
   Serial.printf("[pompes] aujourd'hui : bac A %lu ml, bac B %lu ml\n",
                 (unsigned long)pompes[BAC_A].ml_jour, (unsigned long)pompes[BAC_B].ml_jour);
 }
