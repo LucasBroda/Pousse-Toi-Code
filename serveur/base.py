@@ -8,7 +8,7 @@ Ajout côté serveur, sans effet sur le contrat : un index unique sur
 import sqlite3
 import time
 from contextlib import closing, contextmanager
-from datetime import date
+from datetime import date, datetime, timedelta
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS releves (
@@ -26,7 +26,14 @@ CREATE TABLE IF NOT EXISTS releves (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS releves_sans_doublon ON releves (horodatage, sequence);
 CREATE INDEX IF NOT EXISTS releves_par_horodatage ON releves (horodatage);
+-- Réglages faits depuis la page web (plant de chaque bac). Hors contrat.
+CREATE TABLE IF NOT EXISTS reglages (
+  cle TEXT PRIMARY KEY,
+  valeur TEXT NOT NULL
+);
 """
+
+FORMAT_UTC = "%Y-%m-%dT%H:%M:%SZ"
 
 COLONNES = (
     "horodatage", "recu_le", "sequence",
@@ -78,6 +85,56 @@ def historique(connexion, limite):
 
 def nombre(connexion):
     return connexion.execute("SELECT COUNT(*) FROM releves").fetchone()[0]
+
+
+# Colonnes des courbes : moyenne sur le regroupement, sauf l'arrosage (somme)
+# et le ventilateur (1 s'il a tourné au moins une fois).
+_COURBES = """
+  AVG(sol_a_humidite_pct) AS sol_a_humidite_pct,
+  AVG(sol_b_humidite_pct) AS sol_b_humidite_pct,
+  AVG(air_temperature_c) AS air_temperature_c,
+  AVG(air_humidite_pct) AS air_humidite_pct,
+  AVG(lumiere_lux) AS lumiere_lux,
+  SUM(arrosage_ml) AS arrosage_ml,
+  MAX(ventilateur_actif) AS ventilateur_actif
+"""
+
+
+def historique_periode(connexion, heures, regroupement_min):
+    """Relevés des `heures` qui précèdent le DERNIER relevé, du plus ancien au
+    plus récent. La fenêtre part de l'heure de la DS3231 (horodatage), pas de
+    l'horloge du Pi, qui peut être fausse sans Internet.
+    regroupement_min = 0 : un point par relevé ; 60 : moyenne par heure."""
+    dernier_horodatage = connexion.execute("SELECT MAX(horodatage) FROM releves").fetchone()[0]
+    if dernier_horodatage is None:
+        return []
+    fin = datetime.strptime(dernier_horodatage, FORMAT_UTC)
+    debut = (fin - timedelta(hours=heures)).strftime(FORMAT_UTC)
+    if regroupement_min == 60:
+        cle = "substr(horodatage, 1, 13) || ':00:00Z'"
+    elif regroupement_min == 0:
+        cle = "horodatage"
+    else:
+        raise ValueError("regroupement_min doit valoir 0 ou 60")
+    lignes = connexion.execute(
+        f"SELECT {cle} AS horodatage, {_COURBES} FROM releves "
+        f"WHERE horodatage > ? GROUP BY {cle} ORDER BY {cle}", (debut,))
+    return [dict(ligne) for ligne in lignes]
+
+
+def lire_plants(connexion, par_defaut):
+    """Plant de chaque bac : {"A": "salade", "B": "radis"}."""
+    plants = dict(par_defaut)
+    for ligne in connexion.execute("SELECT cle, valeur FROM reglages WHERE cle LIKE 'plant_bac_%'"):
+        plants[ligne["cle"].removeprefix("plant_bac_").upper()] = ligne["valeur"]
+    return plants
+
+
+def ecrire_plant(connexion, bac, plant):
+    connexion.execute(
+        "INSERT INTO reglages (cle, valeur) VALUES (?, ?) "
+        "ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur",
+        (f"plant_bac_{bac.lower()}", plant))
 
 
 def sauvegarde_due(dossier, intervalle_jours):
